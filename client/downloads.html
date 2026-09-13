@@ -1,0 +1,230 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>My Downloads</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            background: #f5f5f5;
+            margin: 0;
+            padding: 20px;
+        }
+
+        h2 {
+            text-align: center;
+            color: #222;
+        }
+
+        .container {
+            max-width: 800px;
+            margin: 20px auto;
+        }
+
+        .top-nav {
+            display: flex;
+            justify-content: flex-end;
+            margin-bottom: 15px;
+        }
+
+        .btn-back {
+            background: #007bff;
+            color: white;
+            padding: 8px 16px;
+            border-radius: 6px;
+            border: none;
+            cursor: pointer;
+            font-weight: bold;
+        }
+
+        .quota-box {
+            background: #fff;
+            padding: 16px 20px;
+            border-radius: 10px;
+            margin-bottom: 15px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .upgrade-card {
+            background: #ffffff;
+            padding: 16px 20px;
+            border-radius: 10px;
+            margin-bottom: 20px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+            text-align: center;
+        }
+
+        .upgrade-card h4 {
+            margin-top: 0;
+            margin-bottom: 12px;
+            color: #333;
+        }
+
+        .plan-btn {
+            padding: 8px 16px;
+            border: none;
+            border-radius: 6px;
+            cursor: pointer;
+            font-weight: bold;
+            margin: 5px;
+            transition: transform 0.1s;
+        }
+
+        .plan-btn:hover {
+            transform: translateY(-2px);
+        }
+
+        .btn-bronze { background: #cd7f32; color: #fff; }
+        .btn-silver { background: #7f8c8d; color: #fff; }
+        .btn-gold   { background: #f39c12; color: #fff; }
+
+        .plan-badge {
+            background: #007bff;
+            color: #fff;
+            padding: 4px 12px;
+            border-radius: 20px;
+            font-weight: bold;
+            font-size: 13px;
+        }
+
+        .download-card {
+            background: white;
+            padding: 20px;
+            margin: 15px 0;
+            border-radius: 10px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+        }
+
+        .download-card h3 {
+            margin-top: 0;
+            color: #333;
+        }
+
+        .download-card p {
+            color: #555;
+            margin: 6px 0;
+        }
+
+        .empty-state {
+            text-align: center;
+            color: #777;
+            padding: 30px;
+            background: #fff;
+            border-radius: 10px;
+        }
+    </style>
+</head>
+
+<body>
+
+    <h2>My Download History</h2>
+
+    <div class="container">
+        <div class="top-nav">
+            <button class="btn-back" onclick="window.location.href='videos.html'">← Back to Videos</button>
+        </div>
+
+        <!-- User Account & Plan Status -->
+        <div class="quota-box">
+            <div>
+                <strong>User:</strong> <span id="displayEmail">Loading...</span>
+            </div>
+            <div>
+                <span class="plan-badge" id="displayPlan">Plan: Free</span>
+            </div>
+        </div>
+
+        <!-- Upgrade Section -->
+        <div class="upgrade-card">
+            <h4>Upgrade Your Subscription</h4>
+            <button class="plan-btn btn-bronze" onclick="upgradePlan('Bronze')">Bronze (3/day)</button>
+            <button class="plan-btn btn-silver" onclick="upgradePlan('Silver')">Silver (5/day)</button>
+            <button class="plan-btn btn-gold" onclick="upgradePlan('Gold')">Gold (10/day)</button>
+        </div>
+
+        <!-- Download Cards List -->
+        <div id="downloads">Loading downloads...</div>
+    </div>
+
+    <script>
+        const email = localStorage.getItem("userEmail") || "ananya9@gmail.com";
+        document.getElementById("displayEmail").innerText = email;
+
+        const planQuotas = {
+            Free: 1,
+            Bronze: 3,
+            Silver: 5,
+            Gold: 10
+        };
+
+        async function upgradePlan(selectedPlan) {
+            try {
+                const response = await fetch("/upgrade-plan", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({ email: email, plan: selectedPlan })
+                });
+
+                const data = await response.json();
+
+                if (response.ok) {
+                    alert(`${data.message}: ${selectedPlan}`);
+                    window.location.reload();
+                } else {
+                    alert(data.message || "Upgrade failed");
+                }
+            } catch (error) {
+                console.error("Upgrade error:", error);
+                alert("Server error during plan upgrade");
+            }
+        }
+
+        async function loadDownloads() {
+            try {
+                const response = await fetch(`/downloads/${encodeURIComponent(email)}`);
+                const data = await response.json();
+
+                const container = document.getElementById("downloads");
+                container.innerHTML = "";
+
+                if (!data.downloads || data.downloads.length === 0) {
+                    container.innerHTML = `<div class="empty-state"><p>No downloads recorded yet.</p></div>`;
+                    return;
+                }
+
+                const currentPlan = data.downloads[0].userPlan || "Free";
+                const limit = planQuotas[currentPlan] || 1;
+                document.getElementById("displayPlan").innerText = `Plan: ${currentPlan} (${limit}/day limit)`;
+
+                data.downloads.forEach(download => {
+                    const div = document.createElement("div");
+                    div.className = "download-card";
+
+                    const formattedDate = new Date(download.downloadedAt).toLocaleString();
+
+                    div.innerHTML = `
+                        <h3>${download.videoTitle}</h3>
+                        <p>Plan Tier: <strong>${download.userPlan}</strong></p>
+                        <p>Downloaded On: ${formattedDate}</p>
+                        <p style="color: #28a745; font-weight: bold; margin-top: 10px;">Status: Saved Offline</p>
+                    `;
+
+                    container.appendChild(div);
+                });
+
+            } catch (error) {
+                console.error("Failed to load downloads:", error);
+                document.getElementById("downloads").innerHTML = `<div class="empty-state"><p style="color:red;">Failed to load downloads.</p></div>`;
+            }
+        }
+
+        loadDownloads();
+    </script>
+
+</body>
+</html>

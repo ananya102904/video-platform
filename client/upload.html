@@ -1,0 +1,118 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Upload Video</title>
+
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            background: #f5f5f5;
+            margin: 0;
+            padding: 20px;
+        }
+
+        form {
+            max-width: 600px;
+            margin: 30px auto;
+            background: white;
+            padding: 25px;
+            border-radius: 12px;
+        }
+        form input:not([type="checkbox"]),
+form textarea,
+form select {
+    width: 100%;
+    padding: 10px;
+    margin: 8px 0 15px;
+    box-sizing: border-box;
+    border: 1px solid #ccc;
+    border-radius: 6px;
+}
+
+form input[type="checkbox"] {
+    width: auto;
+    margin: 0 8px 0 0;
+}
+
+form button {
+    width: 100%;
+    padding: 12px;
+    border: none;
+    border-radius: 6px;
+    cursor: pointer;
+}
+form button {
+    background: #222;
+    color: white;
+    font-size: 16px;
+    font-weight: bold;
+}
+
+form button:hover {
+    opacity: 0.85;
+}
+    </style>
+</head>
+<body>
+
+    <h2>Upload Video</h2>
+
+    <form id="uploadForm">
+        <input type="text" id="title" placeholder="Video Title" required><br><br>
+
+        <input type="text" id="description" placeholder="Description" required><br><br>
+
+        <input type="text" id="category" placeholder="Category" required><br><br>
+
+        <label>
+            <input type="checkbox" id="isPremium">
+            Premium Video
+        </label><br><br>
+
+        <input type="file" id="video" accept="video/*" required><br><br>
+
+        <button type="submit">Upload Video</button>
+    </form>
+
+    <p id="message"></p>
+
+    <script>
+document.getElementById("uploadForm").addEventListener("submit", async (e) => {
+    e.preventDefault();
+
+    const message = document.getElementById("message");
+
+    try {
+        const formData = new FormData();
+
+        formData.append("title", document.getElementById("title").value);
+        formData.append("description", document.getElementById("description").value);
+        formData.append("category", document.getElementById("category").value);
+        formData.append("isPremium", document.getElementById("isPremium").checked);
+        formData.append("video", document.getElementById("video").files[0]);
+
+        message.innerText = "Uploading...";
+
+        const response = await fetch("/upload-video", {
+            method: "POST",
+            body: formData
+        });
+
+        const data = await response.json();
+
+        if (response.ok) {
+            message.innerText = data.message || "Video uploaded successfully";
+            document.getElementById("uploadForm").reset();
+        } else {
+            message.innerText = data.message || "Upload failed";
+        }
+
+    } catch (error) {
+        console.error(error);
+        message.innerText = "Server connection failed";
+    }
+});
+    </script>
+
+</body>
+</html>

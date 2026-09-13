@@ -1,0 +1,497 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Video Platform</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+    <style>
+        :root {
+            --bg-color: #121212;
+            --card-bg: #1e1e1e;
+            --text-color: #ffffff;
+            --subtext-color: #aaaaaa;
+            --border-color: #333333;
+            --input-bg: #2a2a2a;
+        }
+
+        body.light-theme {
+            --bg-color: #f5f6f8;
+            --card-bg: #ffffff;
+            --text-color: #111111;
+            --subtext-color: #555555;
+            --border-color: #dddddd;
+            --input-bg: #ffffff;
+        }
+
+        body {
+            font-family: Arial, sans-serif;
+            background: var(--bg-color);
+            color: var(--text-color);
+            margin: 0;
+            padding: 20px;
+            transition: background 0.3s, color 0.3s;
+        }
+
+        h2 { text-align: center; }
+
+        .nav-bar {
+            max-width: 900px;
+            margin: 0 auto 20px auto;
+            display: flex;
+            justify-content: flex-end;
+            flex-wrap: wrap;
+            gap: 10px;
+        }
+
+        #videos {
+            max-width: 900px;
+            margin: auto;
+        }
+
+        .video-card {
+            background: var(--card-bg);
+            padding: 20px;
+            margin: 20px 0;
+            border-radius: 12px;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
+            border: 1px solid var(--border-color);
+        }
+
+        /* CUSTOM PLAYER STYLES */
+        .player-container {
+            position: relative;
+            max-width: 700px;
+            margin: 15px auto;
+            background: #000;
+            border-radius: 10px;
+            overflow: hidden;
+        }
+
+        .player-container video {
+            width: 100%;
+            display: block;
+        }
+
+        .custom-controls {
+            display: flex;
+            align-items: center;
+            flex-wrap: wrap;
+            gap: 8px;
+            background: rgba(20, 20, 20, 0.95);
+            padding: 10px;
+        }
+
+        .ctrl-btn {
+            background: #333;
+            color: white;
+            border: none;
+            padding: 6px 12px;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 13px;
+        }
+
+        .ctrl-btn:hover { background: #555; }
+
+        .time-display {
+            font-size: 13px;
+            color: #ddd;
+            margin: 0 5px;
+        }
+
+        .volume-slider {
+            width: 80px;
+            cursor: pointer;
+        }
+
+        /* Double-tap indicator animation */
+        .tap-feedback {
+            position: absolute;
+            top: 40%;
+            font-size: 22px;
+            background: rgba(0, 0, 0, 0.7);
+            color: #fff;
+            padding: 8px 16px;
+            border-radius: 20px;
+            pointer-events: none;
+            opacity: 0;
+            transition: opacity 0.2s;
+        }
+        .tap-left { left: 15%; }
+        .tap-right { right: 15%; }
+
+        /* Action buttons */
+        button.action-btn {
+            padding: 8px 14px;
+            margin: 5px 3px;
+            border: none;
+            border-radius: 6px;
+            cursor: pointer;
+            font-weight: bold;
+        }
+        .btn-like { background: #007bff; color: #fff; }
+        .btn-dislike { background: #6c757d; color: #fff; }
+        .btn-dl { background: #17a2b8; color: #fff; }
+        .btn-logout { background: #dc3545; color: #fff; }
+        .btn-downloads { background: #28a745; color: #fff; }
+        .btn-theme { background: #6c757d; color: #fff; }
+
+        .comment-input {
+            width: calc(100% - 130px);
+            padding: 8px;
+            border: 1px solid var(--border-color);
+            background: var(--input-bg);
+            color: var(--text-color);
+            border-radius: 4px;
+        }
+
+        .comment-item {
+            padding: 10px 0;
+            border-bottom: 1px solid var(--border-color);
+        }
+
+        .comment-header {
+            font-size: 12px;
+            color: var(--subtext-color);
+            margin-bottom: 4px;
+        }
+
+        .comment-actions button {
+            background: none;
+            border: none;
+            font-size: 12px;
+            cursor: pointer;
+            margin-right: 12px;
+            padding: 0;
+        }
+    </style>
+</head>
+
+<body>
+
+    <h2>Video Feed</h2>
+
+    <div class="nav-bar">
+        <button class="action-btn btn-theme" onclick="toggleManualTheme()">🌓 Theme</button>
+        <button class="action-btn btn-downloads" onclick="window.location.href='downloads.html'">📁 My Downloads</button>
+        <button class="action-btn btn-downloads" style="background:#6f42c1;" onclick="window.location.href='watchparty.html'">🎉 Watch Party</button>
+        <button class="action-btn btn-logout" onclick="logout()">Logout</button>
+    </div>
+
+    <div id="videos">Loading videos...</div>
+
+    <script>
+        const token = localStorage.getItem("token");
+        if (!token) window.location.href = "login.html";
+
+        // TIME-BASED THEME (10:00 AM - 12:00 PM Light Theme, Baaki Dark)
+        function applyTimeBasedTheme() {
+            const savedTheme = localStorage.getItem("userTheme");
+            if (savedTheme) {
+                if (savedTheme === "light") document.body.classList.add("light-theme");
+                return;
+            }
+
+            const currentHour = new Date().getHours();
+            if (currentHour >= 10 && currentHour < 12) {
+                document.body.classList.add("light-theme");
+            } else {
+                document.body.classList.remove("light-theme");
+            }
+        }
+
+        function toggleManualTheme() {
+            const isLight = document.body.classList.toggle("light-theme");
+            localStorage.setItem("userTheme", isLight ? "light" : "dark");
+        }
+
+        applyTimeBasedTheme();
+
+        // LOAD ALL VIDEOS
+        async function loadVideos() {
+            try {
+                const response = await fetch("/videos");
+                const data = await response.json();
+                const container = document.getElementById("videos");
+                container.innerHTML = "";
+
+                data.videos.forEach((video, index) => {
+                    const div = document.createElement("div");
+                    div.className = "video-card";
+                    const playerId = `player-${index}`;
+
+                    div.innerHTML = `
+                        <h3>${video.title}</h3>
+                        <p style="color:var(--subtext-color);">${video.description}</p>
+                        <p style="color:var(--subtext-color);">Category: ${video.category} | Views: ${video.views || 0} | Likes: ${video.likes || 0}</p>
+                        
+                        <!-- CUSTOM VIDEO PLAYER -->
+                        <div class="player-container" id="container-${playerId}">
+                            <video id="${playerId}" src="${video.videoUrl}" preload="metadata"></video>
+                            
+                            <div class="tap-feedback tap-left" id="tap-l-${playerId}">⏪ -10s</div>
+                            <div class="tap-feedback tap-right" id="tap-r-${playerId}">⏩ +10s</div>
+
+                            <div class="custom-controls">
+                                <button class="ctrl-btn" onclick="togglePlay('${playerId}', this)">▶ Play</button>
+                                <button class="ctrl-btn" onclick="seekVideo('${playerId}', -10)">⏪ -10s</button>
+                                <button class="ctrl-btn" onclick="seekVideo('${playerId}', 10)">+10s ⏩</button>
+                                <span class="time-display" id="time-${playerId}">00:00 / 00:00</span>
+                                <input type="range" class="volume-slider" min="0" max="1" step="0.05" value="1" onchange="adjustVolume('${playerId}', this.value)">
+                                <button class="ctrl-btn" onclick="toggleFullscreen('container-${playerId}')">⛶ Fullscreen</button>
+                            </div>
+                        </div>
+
+                        <div style="margin-top: 10px;">
+                            <button class="action-btn btn-like" onclick="likeVideo('${video._id}')">👍 Like</button>
+                            <button class="action-btn btn-dislike" onclick="dislikeVideo('${video._id}')">👎 Dislike</button>
+                            <button class="action-btn btn-dl" onclick="downloadVideo('${video._id}')">⬇ Download</button>
+                        </div>
+
+                        <hr style="border-color:var(--border-color); margin: 15px 0;">
+                        <h4>Comments</h4>
+                        <input type="text" class="comment-input" placeholder="Write a comment...">
+                        <button class="action-btn btn-like" onclick="addComment('${video._id}', this)">Post</button>
+                        <div class="comments-list" style="margin-top: 15px;"></div>
+                    `;
+
+                    container.appendChild(div);
+                    setupPlayerEvents(playerId);
+                    loadComments(video._id, div);
+                });
+            } catch (error) {
+                console.error(error);
+                document.getElementById("videos").innerText = "Failed to load videos";
+            }
+        }
+
+        // CUSTOM PLAYER CONTROLS
+        function togglePlay(id, btn) {
+            const vid = document.getElementById(id);
+            if (vid.paused) {
+                vid.play();
+                btn.innerText = "⏸ Pause";
+            } else {
+                vid.pause();
+                btn.innerText = "▶ Play";
+            }
+        }
+
+        function seekVideo(id, seconds) {
+            const vid = document.getElementById(id);
+            vid.currentTime = Math.max(0, Math.min(vid.duration, vid.currentTime + seconds));
+        }
+
+        function adjustVolume(id, val) {
+            document.getElementById(id).volume = val;
+        }
+
+        function toggleFullscreen(containerId) {
+            const el = document.getElementById(containerId);
+            if (!document.fullscreenElement) {
+                el.requestFullscreen().catch(err => alert(err.message));
+            } else {
+                document.exitFullscreen();
+            }
+        }
+
+        function formatTime(sec) {
+            if (isNaN(sec)) return "00:00";
+            const m = Math.floor(sec / 60);
+            const s = Math.floor(sec % 60);
+            return `${m < 10 ? '0' : ''}${m}:${s < 10 ? '0' : ''}${s}`;
+        }
+
+        function setupPlayerEvents(id) {
+            const vid = document.getElementById(id);
+            const timeSpan = document.getElementById(`time-${id}`);
+
+            vid.addEventListener("timeupdate", () => {
+                timeSpan.innerText = `${formatTime(vid.currentTime)} / ${formatTime(vid.duration)}`;
+            });
+
+            vid.addEventListener("loadedmetadata", () => {
+                timeSpan.innerText = `00:00 / ${formatTime(vid.duration)}`;
+            });
+
+            let lastTap = 0;
+            vid.addEventListener("click", (e) => {
+                const now = Date.now();
+                if (now - lastTap < 300) {
+                    const rect = vid.getBoundingClientRect();
+                    const clickX = e.clientX - rect.left;
+
+                    if (clickX > rect.width / 2) {
+                        seekVideo(id, 10);
+                        showFeedback(`tap-r-${id}`);
+                    } else {
+                        seekVideo(id, -10);
+                        showFeedback(`tap-l-${id}`);
+                    }
+                }
+                lastTap = now;
+            });
+        }
+
+        function showFeedback(elementId) {
+            const el = document.getElementById(elementId);
+            el.style.opacity = "1";
+            setTimeout(() => { el.style.opacity = "0"; }, 500);
+        }
+
+        // DOWNLOAD HANDLER (QUOTA TRACKING)
+        async function downloadVideo(id) {
+            const userEmail = localStorage.getItem("userEmail") || "ananya9@gmail.com";
+            try {
+                const res = await fetch(`/videos/${id}/download`, {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({ email: userEmail })
+                });
+                const data = await res.json();
+                if (!res.ok) return alert(data.message);
+
+                alert(`${data.message}\nToday: ${data.downloadsToday}/${data.dailyLimit}\nPlan: ${data.plan}`);
+                if (data.videoUrl) {
+                    const a = document.createElement("a");
+                    a.href = data.videoUrl;
+                    a.setAttribute("download", "");
+                    document.body.appendChild(a);
+                    a.click();
+                    document.body.removeChild(a);
+                }
+            } catch (err) {
+                alert("Download failed");
+            }
+        }
+
+        // VIDEO SOCIAL INTERACTIONS
+        async function likeVideo(id) {
+            const res = await fetch(`/videos/${id}/like`, { method: "POST" });
+            const data = await res.json();
+            alert(data.message);
+            loadVideos();
+        }
+
+        async function dislikeVideo(id) {
+            const res = await fetch(`/videos/${id}/dislike`, { method: "POST" });
+            const data = await res.json();
+            alert(data.message);
+            loadVideos();
+        }
+
+        // SMART COMMENTS SYSTEM
+        async function addComment(videoId, btn) {
+            const input = btn.parentElement.querySelector(".comment-input");
+            const text = input.value.trim();
+            if (!text) return alert("Please enter a comment");
+
+            const email = localStorage.getItem("userEmail") || "ananya9@gmail.com";
+            const username = email.split("@")[0];
+
+            try {
+                const res = await fetch("/comments", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({ videoId, email, username, text })
+                });
+                const data = await res.json();
+                alert(data.message);
+
+                if (res.ok) {
+                    input.value = "";
+                    loadVideos();
+                }
+            } catch (err) {
+                alert("Failed to submit comment");
+            }
+        }
+
+        async function loadComments(videoId, card) {
+            const res = await fetch(`/comments/${videoId}`);
+            const data = await res.json();
+            const list = card.querySelector(".comments-list");
+            list.innerHTML = "";
+
+            if (!data.comments || data.comments.length === 0) {
+                list.innerHTML = `<p style="font-size: 13px; color: var(--subtext-color);">No comments yet.</p>`;
+                return;
+            }
+
+            data.comments.forEach(c => {
+                const div = document.createElement("div");
+                div.className = "comment-item";
+
+                const dateObj = new Date(c.createdAt || Date.now());
+                const timeFormatted = dateObj.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+
+                div.innerHTML = `
+                    <div class="comment-header">
+                        <strong>${c.username || 'User'}</strong> • <span>${timeFormatted}</span>
+                        ${c.isReported ? '<span style="color:#e74c3c; margin-left: 6px; font-weight: bold;">[Under Review]</span>' : ''}
+                    </div>
+                    <p id="comment-text-${c._id}" style="margin: 4px 0; font-size: 14px;">${c.text}</p>
+                    <div class="comment-actions">
+                        <button onclick="reactComment('${c._id}', 'like')" style="color:#007bff;">👍 ${c.likes || 0}</button>
+                        <button onclick="reactComment('${c._id}', 'dislike')" style="color:#888;">👎 ${c.dislikes || 0}</button>
+                        <button onclick="translateComment('${c._id}')" style="color:#28a745;">🌐 Translate</button>
+                        <button onclick="reportComment('${c._id}')" style="color:#dc3545;">🚩 Report</button>
+                    </div>
+                `;
+                list.appendChild(div);
+            });
+        }
+
+        async function reactComment(id, action) {
+            try {
+                const res = await fetch(`/comments/${id}/${action}`, { method: "POST" });
+                const data = await res.json();
+                loadVideos();
+            } catch (err) {
+                console.error(err);
+            }
+        }
+
+        async function reportComment(id) {
+            const reason = prompt("Enter reason for reporting this comment:");
+            if (!reason) return;
+
+            try {
+                const res = await fetch(`/comments/${id}/report`, {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({ reason })
+                });
+                const data = await res.json();
+                alert(data.message);
+                loadVideos();
+            } catch (err) {
+                alert("Failed to report comment");
+            }
+        }
+
+        async function translateComment(id) {
+            const textElem = document.getElementById(`comment-text-${id}`);
+            const originalText = textElem.innerText;
+
+            try {
+                const res = await fetch(`https://translate.googleapis.com/translate_a/single?client=gtx&sl=auto&tl=hi&dt=t&q=${encodeURIComponent(originalText)}`);
+                const data = await res.json();
+                if (data && data[0] && data[0][0]) {
+                    textElem.innerHTML = `${data[0][0][0]} <em style="font-size:12px; color:#28a745;">(Translated)</em>`;
+                }
+            } catch (err) {
+                alert("Translation failed");
+            }
+        }
+
+        function logout() {
+            localStorage.clear();
+            window.location.href = "login.html";
+        }
+
+        loadVideos();
+    </script>
+</body>
+</html>

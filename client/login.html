@@ -1,0 +1,237 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Login - Video Platform</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+    <style>
+        * {
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: Arial, sans-serif;
+            background: #f4f6f9;
+            margin: 0;
+            padding: 20px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            min-height: 100vh;
+        }
+
+        .login-box {
+            width: 100%;
+            max-width: 400px;
+            background: #ffffff;
+            padding: 30px;
+            border-radius: 12px;
+            box-shadow: 0 4px 16px rgba(0,0,0,0.08);
+        }
+
+        h2 {
+            text-align: center;
+            margin-top: 0;
+            color: #222;
+        }
+
+        .subtitle {
+            text-align: center;
+            font-size: 13px;
+            color: #666;
+            margin-bottom: 20px;
+        }
+
+        input {
+            width: 100%;
+            padding: 12px;
+            margin: 8px 0;
+            border: 1px solid #ccc;
+            border-radius: 6px;
+            font-size: 14px;
+        }
+
+        input:focus {
+            outline: none;
+            border-color: #007bff;
+        }
+
+        button {
+            width: 100%;
+            padding: 12px;
+            margin-top: 12px;
+            border: none;
+            border-radius: 6px;
+            font-size: 15px;
+            font-weight: bold;
+            cursor: pointer;
+            transition: background 0.2s;
+        }
+
+        .btn-login {
+            background: #007bff;
+            color: white;
+        }
+
+        .btn-login:hover {
+            background: #0056b3;
+        }
+
+        .btn-verify {
+            background: #28a745;
+            color: white;
+        }
+
+        .btn-verify:hover {
+            background: #1e7e34;
+        }
+
+        #otpSection {
+            display: none;
+            margin-top: 15px;
+            padding-top: 15px;
+            border-top: 1px solid #eee;
+        }
+
+        .info-badge {
+            background: #e9f5ff;
+            color: #0056b3;
+            padding: 8px;
+            border-radius: 6px;
+            font-size: 12px;
+            margin-bottom: 10px;
+            text-align: center;
+        }
+    </style>
+</head>
+
+<body>
+
+    <div class="login-box">
+        <h2>Account Login</h2>
+        <p class="subtitle">Secure multi-device video streaming</p>
+
+        <!-- Step 1: Standard Credentials -->
+        <div id="credentialSection">
+            <input type="email" id="email" placeholder="Enter Email" required>
+            <input type="password" id="password" placeholder="Enter Password" required>
+            <button class="btn-login" onclick="loginUser()">Sign In</button>
+        </div>
+
+        <!-- Step 2: Adaptive OTP Challenge (For New Devices/Locations) -->
+        <div id="otpSection">
+            <div class="info-badge">
+                ⚠️ New device or location detected.<br>Enter the 4-digit verification code.
+            </div>
+            <input type="text" id="otpInput" placeholder="Enter 4-Digit OTP" maxlength="4">
+            <button class="btn-verify" onclick="verifyLoginOtp()">Verify & Continue</button>
+        </div>
+
+        <p style="text-align: center; margin-top: 20px; font-size: 14px; color: #555;">
+            Don't have an account? <a href="register.html" style="color: #007bff; text-decoration: none;">Register</a>
+        </p>
+    </div>
+
+    <script>
+        // Device and location identification logic
+        function getDeviceProfile() {
+            const isMobile = /Mobi|Android/i.test(navigator.userAgent);
+            const device = isMobile ? "Mobile Device" : "Laptop/Desktop";
+            const timeZone = Intl.DateTimeFormat().resolvedOptions().timeZone || "Asia/Kolkata";
+            const city = timeZone.split("/")[1] || "Default City";
+
+            return {
+                deviceIdentifier: device,
+                locationCity: city
+            };
+        }
+
+        let pendingEmail = "";
+
+        async function loginUser() {
+            const email = document.getElementById("email").value.trim();
+            const password = document.getElementById("password").value.trim();
+
+            if (!email || !password) {
+                return alert("Please enter both email and password");
+            }
+
+            const { deviceIdentifier, locationCity } = getDeviceProfile();
+
+            try {
+                const response = await fetch("/login", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({
+                        email,
+                        password,
+                        deviceIdentifier,
+                        locationCity
+                    })
+                });
+
+                const data = await response.json();
+
+                if (!response.ok) {
+                    return alert(data.message || "Login failed");
+                }
+
+                // Check if OTP challenge was triggered
+                if (data.requireOtp) {
+                    pendingEmail = email;
+                    document.getElementById("credentialSection").style.display = "none";
+                    document.getElementById("otpSection").style.display = "block";
+                    alert(`${data.message}\n(Verification OTP: ${data.debugOtp})`);
+                    return;
+                }
+
+                // Normal login successful
+                localStorage.setItem("token", data.token);
+                localStorage.setItem("userEmail", email);
+                alert("Login Successful");
+                window.location.href = "videos.html";
+
+            } catch (error) {
+                console.error("Login request failed:", error);
+                alert("Server error during login");
+            }
+        }
+
+        async function verifyLoginOtp() {
+            const otp = document.getElementById("otpInput").value.trim();
+            if (!otp) return alert("Please enter the verification code");
+
+            const { deviceIdentifier, locationCity } = getDeviceProfile();
+
+            try {
+                const response = await fetch("/verify-login-otp", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({
+                        email: pendingEmail,
+                        otp,
+                        deviceIdentifier,
+                        locationCity
+                    })
+                });
+
+                const data = await response.json();
+
+                if (response.ok) {
+                    localStorage.setItem("token", data.token);
+                    localStorage.setItem("userEmail", pendingEmail);
+                    alert(data.message);
+                    window.location.href = "videos.html";
+                } else {
+                    alert(data.message || "Invalid OTP");
+                }
+            } catch (error) {
+                console.error("OTP verification error:", error);
+                alert("Failed to verify code");
+            }
+        }
+    </script>
+
+</body>
+</html>

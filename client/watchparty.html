@@ -1,0 +1,267 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Watch Party - Video Platform</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <script src="/socket.io/socket.io.js"></script>
+  <style>
+    body { font-family: Arial, sans-serif; background: #121212; color: #fff; margin: 0; padding: 20px; }
+    .container { max-width: 1100px; margin: 0 auto; }
+    .box { background: #1e1e1e; padding: 20px; border-radius: 10px; margin-bottom: 20px; }
+    .grid { display: grid; grid-template-columns: 2fr 1fr; gap: 20px; }
+    video { width: 100%; border-radius: 8px; background: #000; }
+    #remoteVideos { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 10px; }
+    #remoteVideos video { width: 48%; }
+    .controls button { padding: 10px 14px; margin: 4px; border: none; border-radius: 5px; cursor: pointer; background: #007bff; color: white; font-weight: bold; }
+    .controls button.active { background: #dc3545; }
+    #messages { height: 220px; overflow-y: auto; background: #2a2a2a; padding: 10px; border-radius: 6px; }
+    .msg { margin-bottom: 8px; font-size: 14px; }
+    input { padding: 10px; border-radius: 5px; border: 1px solid #444; background: #222; color: #fff; width: calc(100% - 90px); }
+  </style>
+</head>
+<body>
+<div class="container">
+  <h2>Watch Party Room</h2>
+
+  <!-- Setup Area -->
+  <div class="box" id="setupArea">
+    <h3>Create or Join Party</h3>
+    <input type="text" id="videoUrlInput" placeholder="Enter Video URL (e.g. sample.mp4)">
+    <button onclick="createRoom()" style="padding: 10px; background:#28a745; color:white; border:none; border-radius:5px; cursor:pointer;">Create Room</button>
+    <hr style="border-color:#333; margin: 15px 0;">
+    <input type="text" id="joinRoomId" placeholder="Enter Room ID">
+    <button onclick="joinRoom()" style="padding: 10px; background:#17a2b8; color:white; border:none; border-radius:5px; cursor:pointer;">Join Room</button>
+  </div>
+
+  <!-- Active Room Area -->
+  <div id="roomArea" style="display: none;">
+    <div class="box">
+      <span>Room ID: <strong id="currentRoomDisplay"></strong></span> |
+      <button onclick="copyInviteLink()" style="background:#555; color:white; border:none; padding:5px 10px; border-radius:4px; cursor:pointer;">Copy Invite Link</button>
+    </div>
+
+    <div class="grid">
+      <!-- Left Column: Video + Call Controls -->
+      <div>
+        <video id="syncVideo" controls></video>
+        
+        <div class="controls" style="margin-top: 10px;">
+          <button id="micBtn" onclick="toggleMic()">Mute Mic</button>
+          <button id="camBtn" onclick="toggleCam()">Turn Cam Off</button>
+          <button id="screenBtn" onclick="toggleScreenShare()">Share Screen</button>
+          <button id="recordBtn" onclick="toggleRecording()">Start Recording</button>
+          <button onclick="leaveParty()" style="background:#dc3545;">Leave</button>
+        </div>
+
+        <h4>Video Call Participants</h4>
+        <video id="localVideo" autoplay muted playsinline style="width: 30%; border: 2px solid #007bff;"></video>
+        <div id="remoteVideos"></div>
+      </div>
+
+      <!-- Right Column: Live Chat & Participant List -->
+      <div class="box">
+        <h4>Participants</h4>
+        <ul id="userList" style="padding-left: 20px; font-size: 14px;"></ul>
+        <hr style="border-color:#333;">
+        <h4>Live Chat</h4>
+        <div id="messages"></div>
+        <div style="margin-top: 10px; display:flex; gap:5px;">
+          <input type="text" id="chatInput" placeholder="Type a message...">
+          <button onclick="sendChatMessage()" style="padding:10px; background:#007bff; border:none; color:white; border-radius:5px;">Send</button>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+const socket = io();
+let currentRoom = null;
+let localStream = null;
+let mediaRecorder = null;
+let recordedChunks = [];
+let isRemoteUpdate = false;
+
+const currentUser = localStorage.getItem("userName") || "User_" + Math.floor(Math.random() * 1000);
+const DEFAULT_VIDEO_URL = "https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/BigBuckBunny.mp4";
+
+const video = document.getElementById("syncVideo");
+const localVideo = document.getElementById("localVideo");
+
+// Auto-fill room ID if invite link has query param ?room=XYZ
+const urlParams = new URLSearchParams(window.location.search);
+if (urlParams.get("room")) {
+  document.getElementById("joinRoomId").value = urlParams.get("room");
+}
+
+// Initialize webcam and microphone stream
+async function initMedia() {
+  try {
+    localStream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
+    localVideo.srcObject = localStream;
+  } catch (err) {
+    console.warn("Camera or microphone not accessible:", err);
+  }
+}
+
+// Create a new watch party room
+function createRoom() {
+  const inputUrl = document.getElementById("videoUrlInput").value.trim();
+  const videoUrl = inputUrl || DEFAULT_VIDEO_URL;
+  initMedia().then(() => {
+    socket.emit("create-room", { videoId: videoUrl, username: currentUser });
+  });
+}
+
+// Join an existing watch party room
+function joinRoom() {
+  const roomId = document.getElementById("joinRoomId").value.trim();
+  if (!roomId) return alert("Please enter a Room ID");
+  initMedia().then(() => {
+    socket.emit("join-room", { roomId, username: currentUser });
+  });
+}
+
+// Room event listeners
+socket.on("room-created", (data) => enterRoom(data.roomId, data.videoId));
+socket.on("room-joined", (data) => enterRoom(data.roomId, data.videoId));
+socket.on("room-error", (data) => alert(data.message));
+
+// Enter room and load media
+function enterRoom(roomId, videoUrl) {
+  currentRoom = roomId;
+  document.getElementById("setupArea").style.display = "none";
+  document.getElementById("roomArea").style.display = "block";
+  document.getElementById("currentRoomDisplay").innerText = roomId;
+  video.src = videoUrl || DEFAULT_VIDEO_URL;
+  video.load();
+}
+
+// Real-Time Video Sync Event Listeners
+video.addEventListener("play", () => {
+  if (isRemoteUpdate) return;
+  socket.emit("video-control", { roomId: currentRoom, action: "play", currentTime: video.currentTime });
+});
+
+video.addEventListener("pause", () => {
+  if (isRemoteUpdate) return;
+  socket.emit("video-control", { roomId: currentRoom, action: "pause", currentTime: video.currentTime });
+});
+
+video.addEventListener("seeked", () => {
+  if (isRemoteUpdate) return;
+  socket.emit("video-control", { roomId: currentRoom, action: "seek", currentTime: video.currentTime });
+});
+
+// Receive sync updates from server
+socket.on("video-control", (data) => {
+  isRemoteUpdate = true;
+  if (Math.abs(video.currentTime - data.currentTime) > 1) {
+    video.currentTime = data.currentTime;
+  }
+  if (data.action === "play" && video.paused) {
+    video.play().catch(err => console.log("Play error:", err));
+  } else if (data.action === "pause" && !video.paused) {
+    video.pause();
+  }
+  setTimeout(() => { isRemoteUpdate = false; }, 300);
+});
+
+// Real-Time Chat Functions
+function sendChatMessage() {
+  const input = document.getElementById("chatInput");
+  if (!input.value.trim()) return;
+  socket.emit("send-message", { 
+    roomId: currentRoom, 
+    username: currentUser, 
+    message: input.value.trim() 
+  });
+  input.value = "";
+}
+
+socket.on("receive-message", (data) => {
+  const msgBox = document.getElementById("messages");
+  const div = document.createElement("div");
+  div.className = "msg";
+  div.innerHTML = `<strong>${data.username}:</strong> ${data.message}`;
+  msgBox.appendChild(div);
+  msgBox.scrollTop = msgBox.scrollHeight;
+});
+
+// Call Controls: Mute Microphone
+function toggleMic() {
+  if (!localStream) return;
+  const audioTrack = localStream.getAudioTracks()[0];
+  if (audioTrack) {
+    audioTrack.enabled = !audioTrack.enabled;
+    document.getElementById("micBtn").innerText = audioTrack.enabled ? "Mute Mic" : "Unmute Mic";
+    document.getElementById("micBtn").classList.toggle("active");
+  }
+}
+
+// Call Controls: Toggle Camera
+function toggleCam() {
+  if (!localStream) return;
+  const videoTrack = localStream.getVideoTracks()[0];
+  if (videoTrack) {
+    videoTrack.enabled = !videoTrack.enabled;
+    document.getElementById("camBtn").innerText = videoTrack.enabled ? "Turn Cam Off" : "Turn Cam On";
+    document.getElementById("camBtn").classList.toggle("active");
+  }
+}
+
+// Call Controls: Screen Share
+async function toggleScreenShare() {
+  try {
+    const screenStream = await navigator.mediaDevices.getDisplayMedia({ video: true });
+    localVideo.srcObject = screenStream;
+    screenStream.getVideoTracks()[0].onended = () => {
+      localVideo.srcObject = localStream;
+    };
+  } catch (err) {
+    console.error("Screen share error:", err);
+  }
+}
+
+// Session Recording Feature
+function toggleRecording() {
+  const recBtn = document.getElementById("recordBtn");
+  if (mediaRecorder && mediaRecorder.state === "recording") {
+    mediaRecorder.stop();
+    recBtn.innerText = "Start Recording";
+    recBtn.classList.remove("active");
+  } else {
+    recordedChunks = [];
+    const streamToRecord = video.captureStream ? video.captureStream() : localStream;
+    mediaRecorder = new MediaRecorder(streamToRecord);
+    mediaRecorder.ondataavailable = (e) => recordedChunks.push(e.data);
+    mediaRecorder.onstop = () => {
+      const blob = new Blob(recordedChunks, { type: "video/webm" });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `party-recording-${Date.now()}.webm`;
+      a.click();
+    };
+    mediaRecorder.start();
+    recBtn.innerText = "Stop Recording";
+    recBtn.classList.add("active");
+  }
+}
+
+// Copy Room Link to Clipboard
+function copyInviteLink() {
+  const link = `${window.location.origin}/watchparty.html?room=${currentRoom}`;
+  navigator.clipboard.writeText(link);
+  alert("Invite link copied to clipboard!");
+}
+
+// Leave Party Room
+function leaveParty() {
+  socket.emit("leave-room");
+  window.location.reload();
+}
+</script>
+</body>
+</html>
