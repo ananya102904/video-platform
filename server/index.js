@@ -6,9 +6,9 @@ const { Server } = require("socket.io");
 const path = require("path");
 
 const User = require("./models/user");
-const Video = require("./models/Video");
-const Comment = require("./models/Comment");
-const Download = require("./models/Download");
+const Video = require("./models/video");
+const Comment = require("./models/comment");
+const Download = require("./models/download");
 
 const Razorpay = require("razorpay");
 const crypto = require("crypto");
